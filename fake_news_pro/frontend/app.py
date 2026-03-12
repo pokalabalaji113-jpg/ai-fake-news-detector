@@ -268,15 +268,23 @@ html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; }
 
 /* Inputs */
 .stTextArea textarea, .stTextInput input {
-    background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: #0f1629 !important;
+    border: 1px solid rgba(139,92,246,0.3) !important;
     border-radius: 12px !important;
-    color: rgba(255,255,255,0.9) !important;
+    color: #ffffff !important;
     font-family: 'Space Grotesk', sans-serif !important;
+    caret-color: #a78bfa !important;
+    -webkit-text-fill-color: #ffffff !important;
 }
 .stTextArea textarea:focus, .stTextInput input:focus {
-    border-color: rgba(139,92,246,0.5) !important;
-    box-shadow: 0 0 0 3px rgba(139,92,246,0.1) !important;
+    border-color: rgba(139,92,246,0.7) !important;
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.15) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+.stTextArea textarea::placeholder, .stTextInput input::placeholder {
+    color: rgba(255,255,255,0.3) !important;
+    -webkit-text-fill-color: rgba(255,255,255,0.3) !important;
 }
 
 /* Button */
@@ -377,7 +385,7 @@ def progress_bar(value, color):
     </div>"""
 
 
-def save_history(result, source_label):
+def save_history(result, source_label, item_id=None, category_type=None):
     verdict = result.get("verdict", "UNKNOWN")
     st.session_state.history.insert(0, {
         "verdict": verdict,
@@ -385,7 +393,11 @@ def save_history(result, source_label):
         "category": result.get("category", "Unknown"),
         "summary": result.get("summary", "")[:80],
         "source": source_label,
-        "time": datetime.now().strftime("%H:%M:%S")
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "id": item_id,
+        "category_type": category_type,
+        "get_link": f"/analyze/{category_type}/{item_id}" if item_id and category_type else None,
+        "delete_link": f"/analyze/{category_type}/{item_id}" if item_id and category_type else None,
     })
     st.session_state.history = st.session_state.history[:15]
     st.session_state.total_analyzed += 1
@@ -514,8 +526,9 @@ def generate_pdf_report(result, source_label):
         return None
 
 
-def render_result(data, source_label):
+def render_result(data, source_label, category_type=None):
     result = data.get("result", {})
+    item_id = data.get("id", None)
     verdict        = result.get("verdict", "UNKNOWN")
     confidence     = result.get("confidence", 0)
     credibility    = result.get("credibility_score", 0)
@@ -538,7 +551,36 @@ def render_result(data, source_label):
     prog_color = "#10b981" if is_real else "#ef4444"
 
     # Save history
-    save_history(result, source_label)
+    save_history(result, source_label, item_id=item_id, category_type=category_type)
+
+    # ── ID Banner ──
+    if item_id and category_type:
+        st.markdown(f"""
+        <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);
+        border-radius:12px;padding:12px 20px;margin-bottom:16px;
+        display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:rgba(255,255,255,0.6)">
+                💾 Analysis saved to backend
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <span style="background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.4);
+                color:#a78bfa;padding:4px 12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.82rem">
+                    🆔 ID: {item_id}
+                </span>
+                <span style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);
+                color:#60a5fa;padding:4px 12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem">
+                    GET /analyze/{category_type}/{item_id}
+                </span>
+                <span style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+                color:#ef4444;padding:4px 12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem">
+                    DELETE /analyze/{category_type}/{item_id}
+                </span>
+                <span style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);
+                color:#10b981;padding:4px 12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem">
+                    PUT /analyze/{category_type}/{item_id}
+                </span>
+            </div>
+        </div>""", unsafe_allow_html=True)
 
     # ── Verdict Banner ──
     st.markdown(f"""
@@ -749,10 +791,16 @@ with st.sidebar:
         for item in st.session_state.history[:6]:
             icon = "✅" if item["verdict"] == "REAL" else "🚫"
             color = "#10b981" if item["verdict"] == "REAL" else "#ef4444"
+            id_badge = f'<span style="background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:2px 8px;border-radius:6px;font-size:0.68rem;font-family:JetBrains Mono,monospace">ID:{item.get("id","?")}</span>' if item.get("id") else ""
+            api_link = f'<div style="color:rgba(96,165,250,0.6);font-size:0.68rem;font-family:JetBrains Mono,monospace;margin-top:3px">GET /analyze/{item.get("category_type","")}/{item.get("id","")}</div>' if item.get("id") else ""
             st.markdown(f"""
             <div class="history-chip">
-                <div style="color:{color};font-size:0.82rem;font-weight:700">{icon} {item['verdict']} · {item.get('category','')}</div>
-                <div class="history-meta">{item.get('time','')} · {item.get('confidence',0)}% confident</div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span style="color:{color};font-size:0.82rem;font-weight:700">{icon} {item['verdict']}</span>
+                    {id_badge}
+                </div>
+                <div class="history-meta">{item.get('time','')} · {item.get('confidence',0)}% · {item.get('category_type','').upper()}</div>
+                {api_link}
                 <div style="color:rgba(255,255,255,0.4);font-size:0.72rem;margin-top:3px">{item.get('summary','')[:55]}…</div>
             </div>""", unsafe_allow_html=True)
 
@@ -800,7 +848,7 @@ with tab1:
                 data = call_api("/analyze/text", json={"text": article_text})
             if data:
                 st.markdown("---")
-                render_result(data, "Pasted Text")
+                render_result(data, "Pasted Text", category_type="text")
 
 # ── Tab 2: URL ────────────────────────────────────────────────
 with tab2:
@@ -819,7 +867,7 @@ with tab2:
                 data = call_api("/analyze/url", json={"url": url_input})
             if data:
                 st.markdown("---")
-                render_result(data, url_input)
+                render_result(data, url_input, category_type="url")
 
 # ── Tab 3: File Upload ────────────────────────────────────────
 with tab3:
@@ -840,7 +888,7 @@ with tab3:
                 data = call_api("/analyze/file", files={"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)})
             if data:
                 st.markdown("---")
-                render_result(data, uploaded_file.name)
+                render_result(data, uploaded_file.name, category_type="file")
 
 # ── Tab 4: Image / Deepfake ───────────────────────────────────
 with tab4:
@@ -871,7 +919,7 @@ with tab4:
                     data = call_api("/analyze/image", files={"file": (uploaded_img.name, uploaded_img.getvalue(), uploaded_img.type)})
                 if data:
                     st.markdown("---")
-                    render_result(data, uploaded_img.name)
+                    render_result(data, uploaded_img.name, category_type="image")
 
 # ── Tab 5: Analytics ──────────────────────────────────────────
 with tab5:
